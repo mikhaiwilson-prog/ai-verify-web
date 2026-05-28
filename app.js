@@ -11,7 +11,7 @@
 // CDN-hosted WASM and model files are pulled once at boot time. The user's
 // image data never leaves the browser tab.
 
-import { createC2pa } from "https://cdn.jsdelivr.net/npm/c2pa@0.27.0/+esm";
+import { createC2pa } from "https://cdn.jsdelivr.net/npm/@contentauth/c2pa-web@0.8.1/+esm";
 import {
   FilesetResolver,
   FaceDetector,
@@ -19,19 +19,36 @@ import {
 
 // ── Config ─────────────────────────────────────────────────────────────
 
-const C2PA_VERSION = "0.27.0";
+const C2PA_VERSION = "0.8.1";
 const VISION_VERSION = "0.10.14";
 
+// Mirrors src/ai_verify/config.py — keep in sync with the Python plugin.
 const AI_GENERATOR_KEYWORDS = [
   "chatgpt", "openai", "dall-e", "dalle", "gpt-image",
   "firefly", "adobe generative", "midjourney", "stable diffusion",
   "imagen", "gemini", "ideogram", "leonardo", "flux",
   "comfyui", "automatic1111", "runway", "pika", "sora",
+  "media service", "designer", "aurora", "recraft",
+  "nightcafe", "freepik", "magnific",
 ];
 
+// IPTC digitalSourceType vocabulary — AI-related entries.
+// Source: https://cv.iptc.org/newscodes/digitalsourcetype/
 const AI_DST_SUBSTRINGS = [
   "trainedAlgorithmicMedia",
   "compositeWithTrainedAlgorithmicMedia",
+  "compositeSynthetic",
+  "virtualRecording",
+];
+
+// Issuers known to sign C2PA manifests on AI-generated content.
+const AI_SIGNATURE_ISSUERS = [
+  "openai opco",
+  "adobe inc",
+  "google llc",
+  "stability ai",
+  "black forest labs",
+  "midjourney",
 ];
 
 const FACE_MODEL_URL =
@@ -49,8 +66,7 @@ let faceDetector = null;
 async function initEngines() {
   setBoot("warn", "Loading C2PA reader…");
   c2pa = await createC2pa({
-    wasmSrc: `https://cdn.jsdelivr.net/npm/c2pa@${C2PA_VERSION}/dist/assets/wasm/toolkit_bg.wasm`,
-    workerSrc: `https://cdn.jsdelivr.net/npm/c2pa@${C2PA_VERSION}/dist/c2pa.worker.min.js`,
+    wasmSrc: `https://cdn.jsdelivr.net/npm/@contentauth/c2pa-web@${C2PA_VERSION}/dist/resources/c2pa_bg.wasm`,
   });
 
   setBoot("warn", "Loading face detector (one-time, ~230 KB)…");
@@ -77,57 +93,99 @@ function setBoot(state, text) {
 
 // ── C2PA inspection ────────────────────────────────────────────────────
 
+// Action helper: read digitalSourceType from action or action.parameters.
+function actionDst(action) {
+  const direct = action?.digitalSourceType;
+  if (direct) return String(direct);
+  const params = action?.parameters || {};
+  return String(params.digitalSourceType || "");
+}
+
+// Action helper: read softwareAgent name (string or {name} object form).
+function actionSoftwareAgent(action) {
+  let sw = action?.softwareAgent;
+  if (sw == null) sw = (action?.parameters || {}).softwareAgent;
+  if (sw && typeof sw === "object") return sw.name ?? null;
+  if (typeof sw === "string") return sw;
+  return null;
+}
+
+function isAiDst(dst) {
+  if (!dst) return false;
+  const lower = String(dst).toLowerCase();
+  return AI_DST_SUBSTRINGS.some((sub) => lower.includes(sub.toLowerCase()));
+}
+
+function matchesAiIssuer(issuer) {
+  if (!issuer) return false;
+  const lower = String(issuer).toLowerCase();
+  return AI_SIGNATURE_ISSUERS.some((kw) => lower.includes(kw));
+}
+
 async function readC2pa(file) {
+  let reader = null;
   try {
-    const result = await c2pa.read(file);
-    const manifestStore = result?.manifestStore;
-    if (!manifestStore || !manifestStore.activeManifest) {
+    // @contentauth/c2pa-web@0.8.x API: reader.fromBlob returns null when
+    // there is no C2PA metadata. Use blob.type as the asset format.
+    reader = await c2pa.reader.fromBlob(file.type, file);
+    if (reader === null) {
       return emptyC2pa();
     }
-    const m = manifestStore.activeManifest;
 
-    const claimGenName =
-      m.claimGenerator?.name ??
-      m.claimGenerator?.value ??
-      (typeof m.claimGenerator === "string" ? m.claimGenerator : null);
+    // manifestStore() returns the raw c2pa-rs JSON shape (snake_case):
+    // { active_manifest, manifests: { [label]: Manifest }, validation_status, ... }
+    // Same shape the Python c2pa-python library returns — keep both in lockstep.
+    const manifestStore = await reader.manifestStore();
 
-    const signatureIssuer = m.signatureInfo?.issuer ?? null;
-    const validationStatus = m.validationStatus ?? [];
+    const activeLabel = manifestStore?.active_manifest;
+    if (!activeLabel) return emptyC2pa();
+
+    const manifest = manifestStore?.manifests?.[activeLabel];
+    if (!manifest) return emptyC2pa();
+
+    const validationStatus = manifest.validation_status || [];
     const c2paValid = validationStatus.length === 0;
+
+    const genInfo = manifest.claim_generator_info || [];
+    const claimGenName = genInfo[0]?.name ?? manifest.claim_generator ?? null;
+
+    const sigInfo = manifest.signature_info || {};
+    const signatureIssuer = sigInfo.issuer ?? null;
 
     let hasAiAssertion = false;
     let aiSourceType = null;
     let aiSoftwareAgent = null;
 
-    const assertions = m.assertions ?? [];
-    const assertionList = Array.isArray(assertions)
-      ? assertions
-      : Object.values(assertions);
-
-    for (const a of assertionList) {
-      const label = a.label ?? a.uri ?? "";
-      const data = a.data ?? a;
-      if (label.includes("c2pa.actions")) {
-        const actions = data?.actions ?? [];
-        for (const action of actions) {
-          const dst = action.digitalSourceType ?? "";
-          if (AI_DST_SUBSTRINGS.some((sub) => dst.includes(sub))) {
+    // C2PA 2.2 spec: action labels include `c2pa.actions` and `c2pa.actions.v2`.
+    // Match by prefix to catch any version.
+    for (const assertion of manifest.assertions || []) {
+      const label = assertion?.label || "";
+      const data = assertion?.data || {};
+      if (label.startsWith("c2pa.actions")) {
+        for (const action of data.actions || []) {
+          const dst = actionDst(action);
+          if (isAiDst(dst)) {
             hasAiAssertion = true;
             aiSourceType = dst;
-            const sw = action.softwareAgent;
-            aiSoftwareAgent =
-              typeof sw === "string" ? sw : sw?.name ?? null;
+            aiSoftwareAgent = actionSoftwareAgent(action);
             break;
           }
         }
       }
+      if (hasAiAssertion) break;
     }
 
+    // Fallback 1: claim generator name matches a known AI tool (case-insensitive)
     if (!hasAiAssertion && claimGenName) {
-      const lower = claimGenName.toLowerCase();
+      const lower = String(claimGenName).toLowerCase();
       if (AI_GENERATOR_KEYWORDS.some((kw) => lower.includes(kw))) {
         hasAiAssertion = true;
       }
+    }
+
+    // Fallback 2: signature issuer matches a known AI signer
+    if (!hasAiAssertion && matchesAiIssuer(signatureIssuer)) {
+      hasAiAssertion = true;
     }
 
     return {
@@ -139,21 +197,19 @@ async function readC2pa(file) {
       has_ai_assertion: hasAiAssertion,
       ai_source_type: aiSourceType,
       ai_software_agent: aiSoftwareAgent,
-      raw_manifest: m,
+      raw_manifest: manifestStore,
       error: null,
     };
   } catch (err) {
-    const msg = String(err?.message ?? err).toLowerCase();
-    const noManifestPhrases = [
-      "manifest not found",
-      "no claim",
-      "jumbf not found",
-      "no manifest",
-    ];
-    if (noManifestPhrases.some((p) => msg.includes(p))) {
-      return emptyC2pa();
-    }
     return { ...emptyC2pa(), error: String(err?.message ?? err) };
+  } finally {
+    if (reader && typeof reader.free === "function") {
+      try {
+        await reader.free();
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
