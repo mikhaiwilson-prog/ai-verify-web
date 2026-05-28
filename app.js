@@ -85,8 +85,12 @@ async function initEngines() {
 function setBoot(state, text) {
   const root = document.getElementById("bootStatus");
   const t = document.getElementById("bootText");
-  root.classList.remove("ready", "error");
-  if (state === "ready") root.classList.add("ready");
+  root.classList.remove("ready", "error", "hidden");
+  if (state === "ready") {
+    // Once ready, hide the boot pill — keep the UI minimal.
+    root.classList.add("hidden");
+    return;
+  }
   if (state === "error") root.classList.add("error");
   t.textContent = text;
 }
@@ -294,7 +298,7 @@ function buildVerdict(c2pa) {
         ["Source type", c2pa.ai_source_type ?? "—"],
         ["Signed by", c2pa.signature_issuer ?? "—"],
       ],
-      note: "High confidence — no manual cross-check needed. OpenAI Verify would read the same C2PA chunk this just parsed.",
+      note: "High confidence — no further check needed.",
       showLinks: false,
     };
   }
@@ -304,16 +308,16 @@ function buildVerdict(c2pa) {
       iconClass: "ph-shield-check",
       title: "Local C2PA is clean — no AI signal",
       rows: [["Signed by", c2pa.signature_issuer ?? "—"]],
-      note: "Strong evidence this is not AI. If you want an extra cross-check, download the masked image and upload it to OpenAI Verify or Gemini below.",
+      note: "Strong evidence this is not AI, but C2PA alone is not definitive. If you want full confidence, download the masked image and check it on BOTH OpenAI Verify AND Gemini below.",
       showLinks: true,
     };
   }
   return {
     kind: "inconclusive",
     iconClass: "ph-clock-countdown",
-    title: "Can't verify locally — needs manual cross-check",
+    title: "Can't verify locally — manual cross-check required",
     rows: [],
-    note: "The image has no C2PA Content Credentials. This is normal for many cameras and is NOT evidence of AI. Download the masked image below and upload it to OpenAI Verify or Gemini SynthID to check.",
+    note: "No C2PA Content Credentials found. This is NOT evidence the image is real — most cameras and edited images also lack C2PA. AI generators can also strip it. To know whether this image is AI, you MUST check the masked version on BOTH OpenAI Verify AND Gemini below. Checking only one service is not enough — they detect different AI providers.",
     showLinks: true,
   };
 }
@@ -330,9 +334,11 @@ function appendCard(filename) {
   return card;
 }
 
-function setCardState(card, state, statusText) {
+function setCardState(card, state, _statusText) {
   card.dataset.state = state;
-  card.querySelector(".result-status").textContent = statusText;
+  // Status pill removed for minimalism — the verdict-card title now carries
+  // the entire state signal. We still flip card.dataset.state so the
+  // accent bar + verdict-card border color can react.
 }
 
 function renderVerdict(card, verdict) {
@@ -369,13 +375,34 @@ async function processFile(file) {
   setCardState(card, "processing", "Processing");
 
   try {
-    // 1. C2PA (does not need pixels in DOM — reads the file directly)
+    // 1. C2PA (cheap, deterministic — no pixels needed)
     const c2paResult = await readC2pa(file);
 
-    // 2. Load image for face detection
+    // 2. Render verdict + C2PA details
+    const verdict = buildVerdict(c2paResult);
+    renderVerdict(card, verdict);
+
+    const compactC2pa = { ...c2paResult };
+    if (compactC2pa.raw_manifest) {
+      compactC2pa.raw_manifest = "<full manifest available; omitted from preview>";
+    }
+    card.querySelector(".result-c2pa-json").textContent = JSON.stringify(
+      compactC2pa,
+      null,
+      2,
+    );
+
+    // 3. If AI is confirmed by C2PA, no need to mask — analyst won't be doing
+    //    any remote cross-check, so the masked artifact serves no purpose.
+    if (verdict.kind === "ai-confirmed") {
+      setCardState(card, "ok", STATUS_LABELS[verdict.kind] ?? "Done");
+      return;
+    }
+
+    // 4. Otherwise: load image and mask the face for the analyst's
+    //    optional manual upload to Gemini / OpenAI Verify.
     const img = await loadImageFromFile(file);
 
-    // 3. Face mask. Privacy guardrail: refuse if no face.
     let maskedCanvas = null;
     let maskError = null;
     let facesDetected = 0;
@@ -387,22 +414,7 @@ async function processFile(file) {
       maskError = err.message || String(err);
     }
 
-    // 4. Render verdict
-    const verdict = buildVerdict(c2paResult);
-    renderVerdict(card, verdict);
-
-    // 5. C2PA detail (collapsed by default)
-    const compactC2pa = { ...c2paResult };
-    if (compactC2pa.raw_manifest) {
-      compactC2pa.raw_manifest = "<full manifest available; omitted from preview>";
-    }
-    card.querySelector(".result-c2pa-json").textContent = JSON.stringify(
-      compactC2pa,
-      null,
-      2,
-    );
-
-    // 6. Manual cross-check links
+    // 5. Manual cross-check links — shown only when masked image is available
     if (verdict.showLinks && maskedCanvas) {
       card.querySelector(".manual-links").classList.remove("hidden");
     }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Verify · Relay Risk Tools</title>
+  <title>Verify · Relay Risk Tools</title>
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -15,7 +15,7 @@
       <span class="tool-name">Risk Tools</span>
     </div>
     <div class="title-row">
-      <h1 class="page-title">AI Verify</h1>
+      <h1 class="page-title">Verify</h1>
       <p class="page-subtitle">
        AI image verification.
         Negatives do not gurantee that an image is real.
@@ -54,27 +54,11 @@
     ></section>
   </main>
 
-  <footer class="page-footer">
-    <div class="privacy-badge">
-      <i class="ph ph-shield-check" aria-hidden="true"></i>
-      <div>
-        <strong>Private by design.</strong>
-        All processing happens in this browser tab. No upload, no server, no telemetry.
-      </div>
-    </div>
-    <div class="meta-row">
-      <span>ai-verify-web</span>
-      <span aria-hidden="true">&middot;</span>
-      <a href="https://github.com/mikhaiwilson-prog/relay-risk-plugins" target="_blank" rel="noopener">source</a>
-    </div>
-  </footer>
-
   <template id="resultCardTemplate">
     <article class="result-card" data-state="processing" data-kind="pending">
       <div class="result-accent" aria-hidden="true"></div>
       <header class="result-header">
         <div class="result-filename"></div>
-        <div class="result-status">Processing</div>
       </header>
       <div class="result-body">
         <div class="result-preview">
@@ -93,11 +77,13 @@
         <div class="result-details">
           <div class="verdict-card"></div>
           <div class="manual-links hidden" aria-label="Manual cross-check links">
-            <div class="manual-links-label">Upload the masked image to one of these to confirm:</div>
-            <ul>
+            <div class="manual-links-label">
+              <strong>Check the masked image on BOTH services</strong> — each detects different AI providers, so a single source is not enough.
+            </div>
+            <ol class="manual-links-list">
               <li>
                 <a class="link-strong" href="https://openai.com/research/verify" target="_blank" rel="noopener">
-                  <strong>OpenAI Verify</strong>
+                  <strong>OpenVerify</strong>
                   <i class="ph ph-arrow-square-out" aria-hidden="true"></i>
                 </a>
                 <span> &mdash; drop the masked image into the upload area</span>
@@ -109,7 +95,7 @@
                 </a>
                 <span> &mdash; attach the masked image and ask &ldquo;use SynthID verification on this image&rdquo;</span>
               </li>
-            </ul>
+            </ol>
           </div>
           <details class="result-c2pa">
             <summary>C2PA details</summary>

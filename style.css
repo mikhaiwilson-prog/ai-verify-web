@@ -274,6 +274,10 @@ body {
   color: var(--color-background-fill-critical);
 }
 
+.boot-status.hidden {
+  display: none;
+}
+
 .boot-dot {
   width: 8px;
   height: 8px;
@@ -345,37 +349,20 @@ body {
   word-break: break-all;
 }
 
-.result-status {
-  font-family: var(--text-font-basis);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px var(--space-100);
-  border-radius: var(--shape-radius-round);
-  white-space: nowrap;
-  background: var(--color-background-fill-inverse);
-  color: var(--color-text-inverse);
-}
-
-.result-card[data-state="processing"] .result-status {
-  background: var(--color-background-fill-warning);
-  color: var(--color-text-default);
-}
-.result-card[data-state="ok"] .result-status {
-  background: var(--color-background-fill-success);
-  color: var(--color-text-inverse);
-}
-.result-card[data-state="error"] .result-status {
-  background: var(--color-background-fill-critical);
-  color: var(--color-text-inverse);
-}
-
 .result-body {
   display: grid;
   grid-template-columns: 200px 1fr;
   gap: var(--space-300);
   padding: var(--space-250);
+}
+
+/* When AI is confirmed, the masked image is not produced — collapse the
+   layout so the verdict card spans the full width. */
+.result-card[data-kind="ai-confirmed"] .result-preview {
+  display: none;
+}
+.result-card[data-kind="ai-confirmed"] .result-body {
+  grid-template-columns: 1fr;
 }
 
 @media (max-width: 720px) {
@@ -535,13 +522,19 @@ body {
   margin-bottom: var(--space-100);
 }
 
-.manual-links ul {
+.manual-links ul,
+.manual-links ol {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding: 0 0 0 var(--space-200);
   display: flex;
   flex-direction: column;
   gap: var(--space-75);
+}
+.manual-links ul { list-style: none; padding-left: 0; }
+.manual-links ol { list-style: decimal; }
+.manual-links ol li::marker {
+  color: var(--color-text-subtle);
+  font-weight: 600;
 }
 
 .manual-links li {
@@ -659,61 +652,3 @@ body {
 
 /* ── Footer ───────────────────────────────────────────────────── */
 
-.page-footer {
-  width: 100%;
-  max-width: 1080px;
-  margin: var(--space-300) auto 0;
-  padding: var(--space-300) var(--space-400) var(--space-400);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-200);
-  font-size: 13px;
-  color: var(--color-text-subtle);
-}
-
-.privacy-badge {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-150);
-  padding: var(--space-200);
-  background: var(--color-background-surface-brand-secondary);
-  border: 1px solid var(--color-border-brand-secondary-default);
-  border-radius: var(--shape-radius-200);
-  color: var(--color-text-default);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.privacy-badge i {
-  font-size: 20px;
-  color: var(--color-text-brand-secondary);
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.privacy-badge strong {
-  color: var(--color-text-brand-secondary);
-  font-weight: 700;
-}
-
-.meta-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-100);
-}
-
-.meta-row a {
-  color: var(--color-text-link);
-  text-decoration: none;
-  border-radius: var(--shape-radius-100);
-}
-
-.meta-row a:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.meta-row a:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
