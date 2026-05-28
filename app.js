@@ -231,7 +231,7 @@ function buildVerdict(c2pa) {
   if (c2pa.has_c2pa && c2pa.has_ai_assertion) {
     return {
       kind: "ai-confirmed",
-      emoji: "🤖",
+      iconClass: "ph-shield-warning",
       title: "AI confirmed by C2PA provenance",
       rows: [
         ["Generator", c2pa.claim_generator_name ?? "—"],
@@ -245,7 +245,7 @@ function buildVerdict(c2pa) {
   if (c2pa.has_c2pa && !c2pa.has_ai_assertion) {
     return {
       kind: "ai-clean",
-      emoji: "✅",
+      iconClass: "ph-shield-check",
       title: "Local C2PA is clean — no AI signal",
       rows: [["Signed by", c2pa.signature_issuer ?? "—"]],
       note: "Strong evidence this is not AI. If you want an extra cross-check, download the masked image and upload it to OpenAI Verify or Gemini below.",
@@ -254,7 +254,7 @@ function buildVerdict(c2pa) {
   }
   return {
     kind: "inconclusive",
-    emoji: "⏸️",
+    iconClass: "ph-clock-countdown",
     title: "Can't verify locally — needs manual cross-check",
     rows: [],
     note: "The image has no C2PA Content Credentials. This is normal for many cameras and is NOT evidence of AI. Download the masked image below and upload it to OpenAI Verify or Gemini SynthID to check.",
@@ -280,23 +280,23 @@ function setCardState(card, state, statusText) {
 }
 
 function renderVerdict(card, verdict) {
+  card.dataset.kind = verdict.kind;
   const v = card.querySelector(".verdict-card");
-  v.classList.add(verdict.kind);
   v.innerHTML =
-    `<div class="verdict-title"><span class="verdict-emoji">${verdict.emoji}</span>${escapeHtml(verdict.title)}</div>` +
+    `<div class="verdict-title"><i class="ph ${escapeHtml(verdict.iconClass)}" aria-hidden="true"></i>${escapeHtml(verdict.title)}</div>` +
     verdict.rows
       .map(
         ([k, val]) =>
           `<div class="verdict-row"><div class="verdict-key">${escapeHtml(k)}</div><div class="verdict-value">${escapeHtml(val)}</div></div>`,
       )
       .join("") +
-    `<div class="verdict-row" style="margin-top:0.5rem;"><div class="verdict-value">${escapeHtml(verdict.note)}</div></div>`;
+    `<div class="verdict-note">${escapeHtml(verdict.note)}</div>`;
 }
 
 function renderError(card, message) {
+  card.dataset.kind = "error";
   const v = card.querySelector(".verdict-card");
-  v.classList.add("error");
-  v.innerHTML = `<div class="verdict-title"><span class="verdict-emoji">❌</span>Could not process</div><div class="verdict-row"><div class="verdict-value">${escapeHtml(message)}</div></div>`;
+  v.innerHTML = `<div class="verdict-title"><i class="ph ph-warning-circle" aria-hidden="true"></i>Could not process</div><div class="verdict-note">${escapeHtml(message)}</div>`;
 }
 
 function escapeHtml(s) {
@@ -310,7 +310,7 @@ function escapeHtml(s) {
 
 async function processFile(file) {
   const card = appendCard(file.name);
-  setCardState(card, "processing", "Processing…");
+  setCardState(card, "processing", "Processing");
 
   try {
     // 1. C2PA (does not need pixels in DOM — reads the file directly)
@@ -359,7 +359,8 @@ async function processFile(file) {
       previewImg.src = url;
       const downloadBtn = card.querySelector(".result-download");
       downloadBtn.disabled = false;
-      downloadBtn.textContent = `Download masked (${facesDetected} face${facesDetected === 1 ? "" : "s"})`;
+      const label = downloadBtn.querySelector(".result-download-label");
+      label.textContent = `Download masked (${facesDetected} face${facesDetected === 1 ? "" : "s"})`;
       downloadBtn.addEventListener("click", () => {
         const a = document.createElement("a");
         a.href = url;
@@ -369,22 +370,30 @@ async function processFile(file) {
         document.body.removeChild(a);
       });
     } else {
-      // No face detected — surface that prominently, hide manual links
+      // No face detected — surface that prominently, hide manual links + download
       const v = card.querySelector(".verdict-card");
       v.insertAdjacentHTML(
         "beforeend",
-        `<div class="verdict-row" style="margin-top:0.5rem; color: var(--warn);"><div class="verdict-value"><strong>Face masking failed:</strong> ${escapeHtml(maskError ?? "unknown")}. No masked image produced — cannot proceed to manual cross-check.</div></div>`,
+        `<div class="verdict-note"><strong>Face masking failed:</strong> ${escapeHtml(maskError ?? "unknown")}. No masked image produced — cannot proceed to manual cross-check.</div>`,
       );
+      card.querySelector(".manual-links")?.classList.add("hidden");
       card.querySelector(".result-download").remove();
     }
 
-    setCardState(card, "ok", verdict.kind.replace("-", " "));
+    setCardState(card, "ok", STATUS_LABELS[verdict.kind] ?? "Done");
   } catch (err) {
     console.error(err);
     renderError(card, err?.message ?? String(err));
-    setCardState(card, "error", "error");
+    setCardState(card, "error", "Error");
   }
 }
+
+const STATUS_LABELS = {
+  "ai-confirmed": "AI confirmed",
+  "ai-clean": "Clean",
+  "inconclusive": "Inconclusive",
+  "error": "Error",
+};
 
 function stripExt(filename) {
   const dot = filename.lastIndexOf(".");

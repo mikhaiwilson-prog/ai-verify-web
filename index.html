@@ -3,20 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Verify — Trust &amp; Safety Image Verification</title>
+  <title>AI Verify · Relay Risk Tools</title>
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="page-header">
-    <h1>AI Verify</h1>
-    <p class="subtitle">
-      Local AI-image verification for trust-and-safety analysts.
-      Nothing leaves your browser.
-    </p>
+    <div class="brand-row">
+      <span class="brand-wordmark" aria-label="Relay">RELAY</span>
+      <span class="brand-divider" aria-hidden="true"></span>
+      <span class="tool-name">Risk Tools</span>
+    </div>
+    <div class="title-row">
+      <h1 class="page-title">AI Verify</h1>
+      <p class="page-subtitle">
+        Local-only AI image verification for trust-and-safety analysts.
+        C2PA inspection, face masking, and verdict cards &mdash; all in your browser.
+      </p>
+    </div>
   </header>
 
-  <main>
-    <section id="dropZone" class="upload-zone">
+  <main class="page-main">
+    <section id="dropZone" class="upload-zone" aria-label="Upload selfies">
       <input
         type="file"
         id="fileInput"
@@ -25,64 +33,88 @@
         hidden
       />
       <label for="fileInput" class="upload-label">
-        <div class="upload-icon" aria-hidden="true">📁</div>
+        <i class="ph ph-cloud-arrow-up upload-icon" aria-hidden="true"></i>
         <div class="upload-prompt">
-          Drop selfies here or <strong>click to choose files</strong>
+          Drop selfies here, or <span class="upload-link">click to choose files</span>
         </div>
-        <div class="upload-hint">
-          Multiple images supported. PNG, JPEG, or WEBP.
-        </div>
+        <div class="upload-hint">Multiple images supported &middot; PNG, JPEG, WEBP</div>
       </label>
     </section>
 
-    <section id="bootStatus" class="boot-status">
-      <span class="dot" id="bootDot"></span>
+    <section id="bootStatus" class="boot-status" role="status" aria-live="polite">
+      <span class="boot-dot" id="bootDot" aria-hidden="true"></span>
       <span id="bootText">Loading verification engine&hellip;</span>
     </section>
 
-    <section id="results" class="results" aria-live="polite"></section>
+    <section
+      id="results"
+      class="results"
+      aria-live="polite"
+      aria-label="Verification results"
+    ></section>
   </main>
 
   <footer class="page-footer">
     <div class="privacy-badge">
-      <strong>Privacy:</strong> All processing happens in this browser tab.
-      No upload, no server, no telemetry. Close the tab and everything is gone.
+      <i class="ph ph-shield-check" aria-hidden="true"></i>
+      <div>
+        <strong>Private by design.</strong>
+        All processing happens in this browser tab. No upload, no server, no telemetry.
+      </div>
     </div>
-    <div class="version">
-      ai-verify-web · static build · <a href="https://github.com/mikhaiwilson-prog/relay-risk-plugins" target="_blank" rel="noopener">source</a>
+    <div class="meta-row">
+      <span>ai-verify-web</span>
+      <span aria-hidden="true">&middot;</span>
+      <a href="https://github.com/mikhaiwilson-prog/relay-risk-plugins" target="_blank" rel="noopener">source</a>
     </div>
   </footer>
 
   <template id="resultCardTemplate">
-    <article class="result-card" data-state="pending">
+    <article class="result-card" data-state="processing" data-kind="pending">
+      <div class="result-accent" aria-hidden="true"></div>
       <header class="result-header">
         <div class="result-filename"></div>
-        <div class="result-status">Processing&hellip;</div>
+        <div class="result-status">Processing</div>
       </header>
       <div class="result-body">
         <div class="result-preview">
-          <img class="result-preview-img" alt="masked preview" />
-          <button class="result-download" disabled>Download masked image</button>
+          <div class="result-preview-frame">
+            <img class="result-preview-img" alt="" />
+            <div class="result-preview-empty">
+              <i class="ph ph-image" aria-hidden="true"></i>
+              <span>No masked image</span>
+            </div>
+          </div>
+          <button class="btn btn-primary result-download" disabled aria-label="Download masked image">
+            <i class="ph ph-download-simple" aria-hidden="true"></i>
+            <span class="result-download-label">Download masked image</span>
+          </button>
         </div>
         <div class="result-details">
           <div class="verdict-card"></div>
+          <div class="manual-links hidden" aria-label="Manual cross-check links">
+            <div class="manual-links-label">Upload the masked image to one of these to confirm:</div>
+            <ul>
+              <li>
+                <a class="link-strong" href="https://openai.com/research/verify" target="_blank" rel="noopener">
+                  <strong>OpenAI Verify</strong>
+                  <i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                </a>
+                <span> &mdash; drop the masked image into the upload area</span>
+              </li>
+              <li>
+                <a class="link-strong" href="https://gemini.google.com" target="_blank" rel="noopener">
+                  <strong>Gemini</strong>
+                  <i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                </a>
+                <span> &mdash; attach the masked image and ask &ldquo;use SynthID verification on this image&rdquo;</span>
+              </li>
+            </ul>
+          </div>
           <details class="result-c2pa">
             <summary>C2PA details</summary>
             <pre class="result-c2pa-json"></pre>
           </details>
-          <div class="manual-links hidden">
-            <div class="manual-links-label">Upload the masked image to one of these to confirm:</div>
-            <ul>
-              <li>
-                <a href="https://openai.com/research/verify" target="_blank" rel="noopener"><strong>OpenAI Verify</strong></a>
-                — drop the masked image into the upload area
-              </li>
-              <li>
-                <a href="https://gemini.google.com" target="_blank" rel="noopener"><strong>Gemini</strong></a>
-                — attach the masked image and ask &ldquo;use SynthID verification on this image&rdquo;
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
     </article>
